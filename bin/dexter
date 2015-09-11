@@ -1,0 +1,489 @@
+#!/usr/bin/env node
+//Note: usually we compare this against configtools, but we can't since they're not loaded yet....
+if(!process.env.DEXTER_DEV) {
+    process.on('uncaughtException', function(err) {
+      console.log('ERROR', err);
+    });
+}
+var 
+  _ = require('lodash')
+  , rest = require('restler')
+  , path = require('path')
+  , url = require('url')
+  , fs   = require('fs')
+  , prompt = require('prompt')
+  , q    = require('q')
+  , utils = require('../lib/utils')
+  , configtools = require('../lib/config')
+  , packagetools = require('../lib/package')
+  , keytools = require('../lib/keys')
+  , netrctools = require('../lib/netrc')
+  , remotetools = require('../lib/remote')
+  , gittools = require('../lib/git')
+  , parserFactory = require('../lib/runtime/wfdataParser').factory
+  , stepFactory = require('../lib/runtime/stepFactory')
+;
+
+/**
+ *  Defaults
+ */
+prompt.message = prompt.delimiter = '';
+
+function __cliExec(argv) {
+  var title, email, keyname;
+
+    switch(argv[2]) {
+        case 'check_title':
+            if( !(title = argv[3]) ) {
+                help('create');
+                break;
+            }
+            title = slugify(title);
+
+            packagetools.isNameAvailable(title)
+                .then(function(result, msg) {
+                    switch(result) {
+                        case packagetools.NAME_STATUS.AVAILABLE:
+                            console.log('Package name is available');
+                            break;
+                        case packagetools.NAME_STATUS.OWNED_BY_USER:
+                            console.log('This package already exists and you have access to it');
+                            break;
+                        case packagetools.NAME_STATUS.UNAVAILABLE:
+                            console.log('Someone else owns this package already');
+                            break;
+                        default:
+                            console.error('Unknown response from server:', msg);
+                            break;
+                    }
+                }, function(msg) {
+                     console.error(msg);
+                });
+            break;
+        case 'create':
+            if( !(title = argv[3]) )
+                help('create');
+            else
+                create(title);
+            break;
+        case 'run': 
+            if(argv.length == 5) {
+                run(argv[3], argv[4]);
+            } else if(argv.length == 4) {
+                run('.', argv[3]);
+            } else {
+                run('.', 'default');
+            }
+            break;
+        case 'init':
+            if( !(dir = argv[3]) ) {
+                dir = '.';
+            }
+            init(dir);
+            break;
+        case 'push':
+            if( !(dir = argv[3]) ) {
+                dir = '.';
+            }
+            push(dir);
+            break;
+        case 'login':
+            if( !(email = argv[3]) ) {
+                help('login');
+            } else {
+                login(email, function() {
+                    var pubkey = keytools.getDefaultKey()
+                        ;
+                    if(pubkey) {
+                        prompt.get({
+                            name: 'yesno',
+                            message: 'Add your public key for GIT access?',
+                            validator: /y[es]*|n[o]?/,
+                            warning: 'Must respond yes or no',
+                            default: 'yes'
+                        }, function(err, result) {
+                            if(result.yesno.indexOf('y') === 0) {
+                                addKey();
+                            } else {
+                                console.log('If you change your mind, you can always add it later');
+                                help('add_key', false);
+                            }
+                        });
+                    }
+                });
+            }
+            break;
+        case 'add_key':
+            if(argv.length === 4) {
+                addKey(argv[3]);
+            } else {
+                addKey();
+            }
+            break;
+        case 'remove_key':
+            if( !(query = argv[3]) ) {
+                help('remove_key');
+            } else {
+                removeKey(query);
+            }
+            break;
+        case 'list_keys':
+            listKeys();
+            break;
+        default: 
+            help();
+            return;
+    }
+}
+
+function init(dir) {
+    packagetools.isDexterPackage(dir)
+        .then(function(isValid) {
+            if(!isValid) {
+                msg = dir + ' does not look like a valid Dexter package.  Make sure a package.json and meta.json exist and are properly configured';
+                console.error(msg);
+                throw new Error(msg);
+            } else {
+                return gittools.getRepo(dir);
+            }
+        })
+        .then(function(repo) {
+            console.log('Initializing Dexter remote in', path.resolve(dir));
+            var packageName;
+            if(!repo) {
+                console.log('No git repository in', dir, '- did you meant to dexter create?');
+                throw new Error('No git repo');
+            }
+            return packagetools.getPackageName(dir);
+        })
+        .then(function(packageName) {
+            if(!packageName) {
+                console.log('It doesn\'t look like there\'s a valid package name for us to use for the repo...');
+                return;
+            }
+            var remoteUri = configtools.getGitUrl() + packageName;
+            gittools.getOrCreateRemote(
+                dir
+                , 'dexter'
+                , remoteUri
+                , function(remote) {
+                    if(remote) {
+                        console.log('Your dexter remote is ready');
+                    } else {
+                        console.log('Failed initializing a dexter remote');
+                    }
+                }
+            );
+        })
+        .catch(function(err) {
+            console.log(err);
+        });
+}
+
+function push(dir) {
+    gittools.pushToDexter(dir)
+        .then(function() {
+        });
+}
+
+/**
+ * Log the user in and set our token
+ * 
+ * @access public
+ * @return void
+ */
+function login(email, callback) {
+    var credentials = {
+            email: email
+        }
+        ;
+
+    prompt.get({
+        properties: {
+            password: {
+                message: 'Password:',
+                hidden: true
+            }
+        }
+    }, function(err, result) {
+
+        //Make sure the user entered something
+        if(!(credentials.password = result.password))
+            return helpLogin();
+
+        var loginUrl = remotetools.getUrl('auth/login')
+            ;
+        if(configtools.isDev) {
+            console.log('Sending key to', loginUrl);
+        }
+        rest.post(loginUrl, remotetools.signRequest({
+            data: credentials
+        })).on('complete', function(result, response) {
+            remotetools.wrapResponse(result, response, function() {
+                netrctools.write(credentials.email, result.data.token);
+                if(callback) callback();
+            });
+        });
+    });
+}
+
+/**
+ * Add an SSH key to Dexter
+ * 
+ * @access public
+ * @return void
+ */
+function addKey(keypath) {
+    var key
+        , isDefault = false
+        ;
+    if(keypath) {
+        keypath = path.resolve(keypath);
+        try {
+            key = keytools.getKey(keypath);
+        } catch(e) {
+            console.error('Could not read key at ', keypath);
+            return;
+        }   
+    } else {
+        isDefault = true;
+        key = keytools.getDefaultKey();
+        if(!key) {
+            console.log('You don\'t seem to have a default SSH public key');
+            console.log('You can either create a default key:');
+            console.log('------------------------------------');
+            console.log('ssh-keygen -t rsa (hit enter at all prompts)');
+            console.log('------------------------------------');
+            console.log('Or, if you\'t prefer to use another key, pass it into add_key:');
+            console.log('------------------------------------');
+            return help('add_key', false);
+        }
+    }
+    keytools.sendKey(key, function(data) {
+        console.log('Your key is now available on dexter!');
+        if(!isDefault) {
+            console.log('Make sure your .ssh/config is set to use this key for', configtools.api.machineName);
+        }
+    });
+
+}
+
+function removeKey(query) {
+    keytools.removeKey(query, function(data) {
+        console.log('Matching keys removed:', data.keys_removed);
+    });
+}
+
+function listKeys() {
+    keytools.getAll(function(data) {
+        if(data.keys.length === 0) {
+            console.log('No keys have been registered, use <dexter add_key> to add one');
+        }
+        data.keys.forEach(function(key) {
+            console.log(key);
+        });
+    });
+}
+
+/**
+ * Create a new module
+ * 
+ * @param title $title 
+ * @access public
+ * @return void
+ */
+function create(title) {
+    var name   = utils.slugify(title)
+      , mkdirp = require('mkdirp')
+      , ncp    = require('ncp').ncp
+      , src    = path.resolve(__dirname + '/../skel/.')
+      , dest   = path.resolve('./' + name)
+    ;
+
+    packagetools.isNameAvailable(title)
+        //Make sure we're not starting with a claimed name
+        .then(function(result, msg) {
+            if(result == packagetools.NAME_STATUS.AVAILABLE) {
+                return gittools.getConfig();
+            }
+            var reason;
+            switch(result) {
+                case packagetools.NAME_STATUS.OWNED_BY_USER:
+                    reason = 'You already own a module with this name - you should re-use your old repository instead of trying to create a new one';
+                    break;
+                case packagetools.NAME_STATUS.UNAVAILABLE:
+                    reason = 'Someone else has already created a package with this name.  Choose a new one and try creating the module again.';
+                    break;
+                default:
+                    if(configtools.isDev) {
+                        console.error('Invalid name check:', result);
+                    }
+                    reason = 'We were unable to verify the availability of this module name in Dexter.  Try changing the name and creating again - if you continue to have problems, please contact support.';
+                    break;
+            }
+            throw Error(reason);
+        })
+        //Create an empty git repo
+        .then(function(userData) {
+            if(userData.email && userData.name) {
+                console.log('Initializing project as', userData.name, '(' + userData.email + ')');
+            } else {
+                throw Error('Git is not configured - make sure you\'ve set a global name and email');
+            }
+            return gittools.getOrCreateRepo(dest);
+        })
+        //Copy our skeleton into the new folder
+        .then(function(repo) {
+            return q.nfapply(ncp, [src, dest]);
+        })
+        //Pull the metadata in for editing
+        .then(function() {
+            process.chdir(dest);
+            return q.all([
+                //needs to be read as a string so that we can preserve comments
+                q.nfcall(utils.getStringFile, packagetools.getMetaFilename()),
+                q.nfcall(utils.getJsonFile, packagetools.getPackageFilename()),
+                q.nfcall(utils.getStringFile, packagetools.getFixtureEnvFilename()),
+                gittools.getConfig()
+            ]);
+        })
+        //Tweak our metadata
+        .then(function(results) {
+            var meta = results[0]
+            , package = results[1]
+            , fixtureEnv = results[2]
+            , gitConfig = results[3]
+            ;
+
+            //needs to be treated as a string so that we can preserve comments
+            meta = meta.replace("%MYTITLE%", title.replace(/"/g, '\\"'));
+            package.name = name;
+            fixtureEnv = fixtureEnv.replace('YOUR_EMAIL', gitConfig.email.replace(/"/g, '\\"'));
+            fixtureEnv = fixtureEnv.replace('YOUR_NAME', gitConfig.name.replace(/"/g, '\\"'));
+            return q.all([
+                q.nfcall(fs.writeFile, packagetools.getMetaFilename(), meta),
+                q.nfcall(fs.writeFile, packagetools.getPackageFilename(), JSON.stringify(package, null, 4)),
+                q.nfcall(fs.writeFile, packagetools.getFixtureEnvFilename(), fixtureEnv),
+            ]);
+        })
+        //Run an npm install
+        .then(function() {
+            return packagetools.installDependencies(dest);
+        })
+        //Commit all the stuff we changed
+        .then(function() {
+            return gittools.initialCommit(dest);
+        })
+        .then(function() {
+            return init(dest);
+        })
+        .catch(function(err) {
+            if(err && err.message) {
+                console.error('Failed creating Dexter module:',  err.message);
+            } else {
+                console.error('Failed creating Dexter module:',  err);
+            }
+            process.exit(1);
+        })
+        ;
+}
+
+/**
+ * Run a fixture against the current module. 
+ * 
+ * @access public
+ * @return void
+ */
+function run(dir, fixtureName) {
+    var moddir = path.resolve(dir)
+        , mod = require(moddir)
+        , fixturePath = moddir+'/fixtures/'+fixtureName+'.js'
+        , fixture = require(fixturePath)
+        , meta = packagetools.getMetaData(moddir)
+        , pkg = packagetools.getPackageData(moddir)
+        , step
+        , parser
+    ;
+
+    packagetools.isDexterPackage(moddir)
+        .then(function(isValid) {
+            var msg;
+            if(!isValid) {
+                msg = moddir + ' does not look like a valid Dexter package.  Make sure a package.json and meta.json exist and are properly configured';
+                console.error(msg);
+                throw new Error(msg);
+            } else {
+                return packagetools.getPackageName(moddir);
+            }
+        })
+        .then(function(name) {
+            //Fix a few fixture variables
+            fixture.modules[name] = {
+                "filters"       : [],
+                "form_checkout" : null,
+                "form_run"      : null,
+                "form_settings" : null,
+                "git_url"       : null,
+                "is_global"     : 0,
+                "name"    : name,
+                "source": "test_module_source",
+                "title": name,
+                "updated_at": "2015-01-01 00:00:00",
+                "user_id": 1,
+                package: pkg,
+                meta: meta
+            };
+            _.forEach(fixture.steps, function(step, key) {
+                if(step.name == 'YOUR_MODULE_NAME') {
+                    step.name = name;
+                }
+            });
+
+            step = stepFactory.create(mod);
+            parser = parserFactory(fixture);
+            try {
+                step.run(parser.step(parser.instance('active_step')), parser);
+            } catch(e) {
+                console.error('ERR', e.stack || e);
+            }
+
+            step.deferred.promise.then(function(out) {
+                console.log(JSON.stringify(out,null,4));
+            }, function(err) {
+                console.error('fail', err);
+            });
+        });
+}
+
+/*
+ * HELPERS
+ */
+
+function help(command, showGeneral) {
+    if(showGeneral !== false) showGeneral = true;
+    if(showGeneral) {
+        console.log('dexter <command>');
+        console.log('---------------------------------------');
+    }
+    var helptext = {
+        'login': 'dexter login <email> Log into Dexter and get an API key'
+        , 'add_key': 'dexter add_key <keyname>(optional) Add an SSH key to the system'
+        , 'remove_key': 'dexter remove_key <name|partial value> Delete all SSH public keys with the given name or a single key matching part of the value'
+        , 'list_keys': 'dexter list_keys See all the SSH public keys you have registered'
+        , 'check_title': 'dexter check_title <moduleName> See if a given module name is available'
+        , 'create': 'dexter create <moduleName> Create a skeleton for a new module'
+        , 'init': 'dexter init <dir> Initialize a Dexter git remote in the given directory'
+        , 'run': 'dexter run <fixture> Run a test using a fixture (given name or "default")'
+        , 'push': 'dexter push <dir> Push your most recently committed code to Dexter'
+        };
+    if(helptext[command]) console.log(helptext[command]);
+    else {
+        Object.keys(helptext).forEach(function(key) {
+            console.log(helptext[key]);
+        });
+    }
+}
+
+if(require.main === module) {
+    __cliExec(process.argv);
+}
