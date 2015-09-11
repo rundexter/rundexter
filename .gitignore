@@ -28,4 +28,3 @@ node_modules
 
 # Rundexter-specific files
 .*.sw*
-/skel/fixtures/env.js
