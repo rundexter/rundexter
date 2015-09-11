@@ -1,10 +1,14 @@
 {
   "name": "rundexter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The SDK for https://rundexter.com",
   "main": "index.js",
   "bin": {
     "dexter": "bin/dexter"
+  },
+  "repository": {
+    "type" : "git",
+    "url"  : "https://github.com/rundexter/rundexter.git"
   },
   "keywords": [],
   "author": "Daniel Ilkovich",
