@@ -20,7 +20,7 @@ var
   , netrctools = require('../lib/netrc')
   , remotetools = require('../lib/remote')
   , gittools = require('../lib/git')
-  , parserFactory = require('../lib/runtime/wfdataParser').factory
+  , parserFactory = require('../lib/runtime/appDataParser').factory
   , stepFactory = require('../lib/runtime/stepFactory')
 ;
 
@@ -335,6 +335,9 @@ function create(title) {
         //Copy our skeleton into the new folder
         .then(function(repo) {
             return q.nfapply(ncp, [src, dest]);
+        })
+        .then(function() {
+            return q.nfapply(fs.rename, [dest+'/_gitignore', dest+'/.gitignore']);
         })
         //Pull the metadata in for editing
         .then(function() {
