@@ -38,7 +38,7 @@ function __cliExec(argv) {
                 help('create');
                 break;
             }
-            title = slugify(title);
+            title = utils.slugify(title);
 
             packagetools.isNameAvailable(title)
                 .then(function(result, msg) {
@@ -383,6 +383,8 @@ function create(title) {
         .catch(function(err) {
             if(err && err.message) {
                 console.error('Failed creating Dexter module:',  err.message);
+            } else if(err && err.error) {
+                console.error('Failed creating Dexter module:',  err.error);
             } else {
                 console.error('Failed creating Dexter module:',  err);
             }
