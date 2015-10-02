@@ -13,7 +13,9 @@ describe("git library", function() {
     it("gets git config", function(done) {
         git.getConfig()
             .then(function(config) {
-                expect(config.email).to.not.be.empty;
+                expect(config.email, 'email').to.not.be.empty;
+                expect(config.name, 'name').to.not.be.empty;
+                expect(config.username, 'username').to.not.be.empty;
                 done();
             })
             .catch(function(err) {
