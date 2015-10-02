@@ -33,12 +33,15 @@ function __cliExec(argv) {
   var title, email, keyname;
 
     switch(argv[2]) {
+        case 'version':
+            return q.nfcall(utils.getJsonFile, packagetools.getPackageFilename(__dirname + '/..')).then(function(pkg) { console.log(pkg.version); });
+            break;
         case 'check_title':
             if( !(title = argv[3]) ) {
                 help('create');
                 break;
             }
-            title = slugify(title);
+            title = utils.slugify(title);
 
             packagetools.isNameAvailable(title)
                 .then(function(result, msg) {
@@ -360,7 +363,9 @@ function create(title) {
 
             //needs to be treated as a string so that we can preserve comments
             meta = meta.replace("%MYTITLE%", title.replace(/"/g, '\\"'));
-            package.name = name;
+            package.name   = name;
+            package.author = gitConfig.name;
+
             fixtureEnv = fixtureEnv.replace('YOUR_EMAIL', gitConfig.email.replace(/"/g, '\\"'));
             fixtureEnv = fixtureEnv.replace('YOUR_NAME', gitConfig.name.replace(/"/g, '\\"'));
             return q.all([
@@ -383,6 +388,8 @@ function create(title) {
         .catch(function(err) {
             if(err && err.message) {
                 console.error('Failed creating Dexter module:',  err.message);
+            } else if(err && err.error) {
+                console.error('Failed creating Dexter module:',  err.error);
             } else {
                 console.error('Failed creating Dexter module:',  err);
             }
