@@ -15,6 +15,7 @@ var
   , q    = require('q')
   , utils = require('../lib/utils')
   , configtools = require('../lib/config')
+  , account = require('../lib/account')
   , packagetools = require('../lib/package')
   , keytools = require('../lib/keys')
   , netrctools = require('../lib/netrc')
@@ -140,7 +141,12 @@ function __cliExec(argv) {
 }
 
 function init(dir) {
-    packagetools.isDexterPackage(dir)
+    var user = null;
+    account.me()
+        .then(function(userData) {
+            user = userData.data;
+            return packagetools.isDexterPackage(dir);
+        })
         .then(function(isValid) {
             if(!isValid) {
                 msg = dir + ' does not look like a valid Dexter package.  Make sure a package.json and meta.json exist and are properly configured';
@@ -164,7 +170,8 @@ function init(dir) {
                 console.log('It doesn\'t look like there\'s a valid package name for us to use for the repo...');
                 return;
             }
-            var remoteUri = configtools.getGitUrl() + packageName;
+            var remoteUri = configtools.getGitUrl() + user.username + '/' + packageName;
+            console.log('Using remote', remoteUri);
             gittools.getOrCreateRemote(
                 dir
                 , 'dexter'
