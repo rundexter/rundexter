@@ -192,8 +192,11 @@ function init(dir) {
 
 function push(dir) {
     gittools.pushToDexter(dir)
-        .then(function() {
-        });
+        .catch(function(e) {
+            console.error('Error pushing:', e);
+        })
+        .done()
+    ;
 }
 
 /**
