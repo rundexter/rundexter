@@ -31,12 +31,11 @@ var
 prompt.message = prompt.delimiter = '';
 
 function __cliExec(argv) {
-  var title, email, keyname;
+  var title, email, keyname, dir, query;
 
     switch(argv[2]) {
         case 'version':
             return q.nfcall(utils.getJsonFile, packagetools.getPackageFilename(__dirname + '/..')).then(function(pkg) { console.log(pkg.version); });
-            break;
         case 'check_title':
             if( !(title = argv[3]) ) {
                 help('create');
@@ -68,7 +67,7 @@ function __cliExec(argv) {
             if( !(title = argv[3]) )
                 help('create');
             else
-                create(title);
+                return create(title);
             break;
         case 'run': 
             if(argv.length == 5) {
@@ -141,8 +140,8 @@ function __cliExec(argv) {
 }
 
 function init(dir) {
-    var user = null;
-    account.me()
+    var user = null, msg;
+    return account.me()
         .then(function(userData) {
             user = userData.data;
             return packagetools.isDexterPackage(dir);
@@ -222,7 +221,7 @@ function login(email, callback) {
 
         //Make sure the user entered something
         if(!(credentials.password = result.password))
-            return helpLogin();
+            return help('login', false);
 
         var loginUrl = remotetools.getUrl('auth/login')
             ;
@@ -313,7 +312,9 @@ function create(title) {
       , dest   = path.resolve('./' + name)
     ;
 
-    packagetools.isNameAvailable(title)
+    return packagetools
+        .doesNotExist(dest)
+        .then(packagetools.isNameAvailable.bind(packagetools, title))
         //Make sure we're not starting with a claimed name
         .then(function(result, msg) {
             if(result == packagetools.NAME_STATUS.AVAILABLE) {
@@ -398,12 +399,17 @@ function create(title) {
         .catch(function(err) {
             if(err && err.message) {
                 console.error('Failed creating Dexter module:',  err.message);
+                return q.reject(err.message);
             } else if(err && err.error) {
                 console.error('Failed creating Dexter module:',  err.error);
+                return q.reject(err.error);
             } else {
                 console.error('Failed creating Dexter module:',  err);
+                return q.reject(err);
             }
-            process.exit(1);
+
+            if(require.main === module)
+                process.exit(1);
         })
         ;
 }
@@ -507,3 +513,15 @@ function help(command, showGeneral) {
 if(require.main === module) {
     __cliExec(process.argv);
 }
+
+module.exports = {
+    exec: function() {
+        var args = Array.prototype.slice.call(arguments);
+
+        //dummy parameters
+        args.unshift('node');
+        args.unshift('dexter');
+
+        return __cliExec.call(this, args);
+    }
+};
