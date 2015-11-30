@@ -55,6 +55,16 @@ module.exports = _.merge({
             api_key: 'apikeytest'
         }
          */
+        /*
+         * You should also add your providers to env.js
+         * Example:
+        providers: {
+            github: {
+                access_token: 'abc123',
+                username: 'foo'
+            }
+        }
+         */
     }
     , data: {
         local_test_step: {
