@@ -15,7 +15,7 @@ module.exports = {
             "id": "YOUR_EMAIL",
             "api_key": "YOUR_API_KEY"
         },
-        "provider": {
+        "providers": {
             "LOWERCASE_PROVIDER_NAME": {
                 "access_token": "4908y290734yg3947ty3974t",
                 "OTHER_DATA": "foo"
