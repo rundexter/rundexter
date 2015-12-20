@@ -1,6 +1,6 @@
 {
   "name": "rundexter",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "The SDK for https://rundexter.com",
   "main": "index.js",
   "bin": {
