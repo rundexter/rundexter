@@ -16,8 +16,16 @@ module.exports = {
             "api_key": "YOUR_API_KEY"
         },
         "providers": {
-            "LOWERCASE_PROVIDER_NAME": {
-                "access_token": "4908y290734yg3947ty3974t",
+            //e.g. github, google, twitter, etc.
+            "PROVIDER_NAME": {
+                "credentials": {
+                    "access_token": "...",
+                    //OAuth1:
+                    "access_token_secret": "...",
+                    "consumer_key": "...",
+                    //OAuth2:
+                    "client_id": "..."
+                },
                 "OTHER_DATA": "foo"
             }
         }
