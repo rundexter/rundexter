@@ -94,26 +94,7 @@ function __cliExec(argv) {
             if( !(email = argv[3]) ) {
                 help('login');
             } else {
-                login(email, function() {
-                    var pubkey = keytools.getDefaultKey()
-                        ;
-                    if(pubkey) {
-                        prompt.get({
-                            name: 'yesno',
-                            message: 'Add your public key for GIT access?',
-                            validator: /y[es]*|n[o]?/,
-                            warning: 'Must respond yes or no',
-                            default: 'yes'
-                        }, function(err, result) {
-                            if(result.yesno.indexOf('y') === 0) {
-                                addKey();
-                            } else {
-                                console.log('If you change your mind, you can always add it later');
-                                help('add_key', false);
-                            }
-                        });
-                    }
-                });
+                login(email);
             }
             break;
         case 'add_key':
@@ -205,35 +186,60 @@ function push(dir) {
  * @return void
  */
 function login(email, callback) {
-    var credentials = {
-            email: email
-        }
-        ;
-
     prompt.get({
-        properties: {
-            password: {
-                message: 'Password:',
-                hidden: true
-            }
-        }
+        name: 'yesno',
+        message: 'Modules created through the Dexter SDK are public.  Other people can use them in Apps, and other developers can pull and use your code.  Is this OK?',
+        validator: /y[es]*|n[o]?/,
+        warning: 'Must respond yes or no',
+        default: 'yes'
     }, function(err, result) {
-
-        //Make sure the user entered something
-        if(!(credentials.password = result.password))
-            return help('login', false);
-
-        var loginUrl = remotetools.getUrl('auth/login')
-            ;
-        if(configtools.isDev) {
-            console.log('Sending key to', loginUrl);
+        if(result.yesno.indexOf('y') !== 0) {
+            return;
         }
-        rest.post(loginUrl, remotetools.signRequest({
-            data: credentials
-        })).on('complete', function(result, response) {
-            remotetools.wrapResponse(result, response, function() {
-                netrctools.write(credentials.email, result.data.token);
-                if(callback) callback();
+        var credentials = { email: email };
+        prompt.get({
+            properties: {
+                password: {
+                    message: 'Password:',
+                    hidden: true
+                }
+            }
+        }, function(err, result) {
+            //Make sure the user entered something
+            if(!(credentials.password = result.password)) {
+                return help('login', false);
+            }
+
+            var loginUrl = remotetools.getUrl('auth/login');
+            if(configtools.isDev) {
+                console.log('Sending key to', loginUrl);
+            }
+            rest.post(loginUrl, remotetools.signRequest({
+                data: credentials
+            })).on('complete', function(result, response) {
+                remotetools.wrapResponse(result, response, function() {
+                    //Write our new creds
+                    netrctools.write(credentials.email, result.data.token);
+                    //Ask if we should send a public key
+                    var pubkey = keytools.getDefaultKey()
+                        ;
+                    if(pubkey) {
+                        prompt.get({
+                            name: 'yesno',
+                            message: 'Add your public key for GIT access?',
+                            validator: /y[es]*|n[o]?/,
+                            warning: 'Must respond yes or no',
+                            default: 'yes'
+                        }, function(err, result) {
+                            if(result.yesno.indexOf('y') === 0) {
+                                addKey();
+                            } else {
+                                console.log('If you change your mind, you can always add it later');
+                                help('add_key', false);
+                            }
+                        });
+                    }
+                });
             });
         });
     });
