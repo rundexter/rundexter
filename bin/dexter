@@ -471,8 +471,8 @@ function run(dir, fixtureName) {
                 }
             });
 
-            step = stepFactory.create(mod);
             parser = parserFactory(fixture);
+            step = stepFactory.create(mod, parser);
             try {
                 step.run(parser.step(parser.instance('active_step')), parser);
             } catch(e) {

@@ -14,6 +14,7 @@
   "author": "Daniel Ilkovich",
   "license": "",
   "dependencies": {
+    "dropbox": "^0.10.3",
     "lodash": "^3.10.0",
     "mkdirp": "^0.5.0",
     "ncp": "^2.0.0",
