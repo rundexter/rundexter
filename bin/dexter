@@ -482,7 +482,7 @@ function run(dir, fixtureName) {
             step.deferred.promise.then(function(out) {
                 console.log(JSON.stringify(out,null,4));
             }, function(err) {
-                console.error('fail', err);
+                console.error('fail', err instanceof Error ? err.stack : err);
             });
         });
 }
