@@ -2,7 +2,7 @@
 //Note: usually we compare this against configtools, but we can't since they're not loaded yet....
 if(!process.env.DEXTER_DEV) {
     process.on('uncaughtException', function(err) {
-      console.log('ERROR', err);
+      console.log('ERROR', err.stack || err);
     });
 }
 var 
