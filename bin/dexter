@@ -473,6 +473,7 @@ function run(dir, fixtureName) {
 
             parser = parserFactory(fixture);
             step = stepFactory.create(mod, parser);
+            require('../lib/runtime/fileManager').setModuleDirectory(moddir);
             try {
                 step.run(parser.step(parser.instance('active_step')), parser);
             } catch(e) {
