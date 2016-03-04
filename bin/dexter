@@ -31,7 +31,7 @@ var
 prompt.message = prompt.delimiter = '';
 
 function __cliExec(argv) {
-  var title, email, keyname, dir, query;
+  var title, email, keyname, dir, query, useStorage;
 
     switch(argv[2]) {
         case 'version':
@@ -70,12 +70,14 @@ function __cliExec(argv) {
                 return create(title);
             break;
         case 'run': 
+            useStorage = argv[argv.length - 1] !== '--no-storage';
+            argv.pop();
             if(argv.length == 5) {
-                run(argv[3], argv[4]);
+                run(argv[3], argv[4], useStorage);
             } else if(argv.length == 4) {
-                run('.', argv[3]);
+                run('.', argv[3], useStorage);
             } else {
-                run('.', 'default');
+                run('.', 'default', useStorage);
             }
             break;
         case 'init':
@@ -113,6 +115,12 @@ function __cliExec(argv) {
             break;
         case 'list_keys':
             listKeys();
+            break;
+        case 'clear_storage':
+            if( !(dir = argv[3]) ) {
+                dir = '.';
+            }
+            clearStorage(dir);
             break;
         default: 
             help();
@@ -426,7 +434,7 @@ function create(title) {
  * @access public
  * @return void
  */
-function run(dir, fixtureName) {
+function run(dir, fixtureName, cache) {
     var moddir = path.resolve(dir)
         , mod = require(moddir)
         , fixturePath = moddir+'/fixtures/'+fixtureName+'.js'
@@ -449,6 +457,7 @@ function run(dir, fixtureName) {
             }
         })
         .then(function(name) {
+            var storageTools = require('../lib/runtime/storageManager');
             //Fix a few fixture variables
             fixture.modules[name] = {
                 "filters"       : [],
@@ -473,6 +482,8 @@ function run(dir, fixtureName) {
 
             parser = parserFactory(fixture);
             step = stepFactory.create(mod, parser);
+            storageTools.setModuleDirectory(moddir);
+            storageTools.setEnabled(cache);
             require('../lib/runtime/fileManager').setModuleDirectory(moddir);
             try {
                 step.run(parser.step(parser.instance('active_step')), parser);
@@ -486,6 +497,18 @@ function run(dir, fixtureName) {
                 console.error('fail', err instanceof Error ? err.stack : err);
             });
         });
+}
+
+function clearStorage(dir) {
+    var moddir = path.resolve(dir)
+        , storageTools = require('../lib/runtime/storageManager')
+    ;
+    storageTools.setModuleDirectory(moddir);
+    if(storageTools.clearStorage()) {
+        console.log('Stored data removed');
+    } else {
+        console.log('No stored data found');
+    }
 }
 
 /*
@@ -506,7 +529,8 @@ function help(command, showGeneral) {
         , 'check_title': 'dexter check_title <moduleName> See if a given module name is available'
         , 'create': 'dexter create <moduleName> Create a skeleton for a new module'
         , 'init': 'dexter init <dir> Initialize a Dexter git remote in the given directory'
-        , 'run': 'dexter run <fixture> Run a test using a fixture (given name or "default")'
+        , 'run': 'dexter run <fixture> [--no-storage] Run a test using a fixture (given name or "default"), optionally ignoring the cache'
+        , 'clear_storage': 'dexter clear_storage Remove any stored data from module tests'
         , 'push': 'dexter push <dir> Push your most recently committed code to Dexter'
         };
     if(helptext[command]) console.log(helptext[command]);
