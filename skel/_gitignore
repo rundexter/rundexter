@@ -1,3 +1,4 @@
 *.sw*
 node_modules
 fixtures/env.js
+.fixtureStorage
