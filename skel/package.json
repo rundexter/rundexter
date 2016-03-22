@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "author": "Someone Somewhere",
-  "license": "ISC",
+  "license": "MIT",
   "private": true,
   "dependencies": {
     "lodash": "^3.9.3"
