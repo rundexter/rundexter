@@ -431,8 +431,8 @@ function run(dir, fixtureName) {
         , mod = require(moddir)
         , fixturePath = moddir+'/fixtures/'+fixtureName+'.js'
         , fixture = require(fixturePath)
-        , meta = packagetools.getMetaData(moddir)
-        , pkg = packagetools.getPackageData(moddir)
+        , meta
+        , pkg
         , step
         , parser
     ;
@@ -445,10 +445,16 @@ function run(dir, fixtureName) {
                 console.error(msg);
                 throw new Error(msg);
             } else {
-                return packagetools.getPackageName(moddir);
+                return q.all([
+                    packagetools.getPackageName(moddir)
+                    , packagetools.getMetaData(moddir)
+                    ,  packagetools.getPackageData(moddir)
+                ]);
             }
         })
-        .then(function(name) {
+        .then(function(name, metaData, packageData) {
+            meta = metaData;
+            pkg = packageData;
             //Fix a few fixture variables
             fixture.modules[name] = {
                 "filters"       : [],
@@ -468,6 +474,8 @@ function run(dir, fixtureName) {
             _.forEach(fixture.steps, function(step, key) {
                 if(step.name == 'YOUR_MODULE_NAME') {
                     step.name = name;
+                    step.type = 'module';
+                    step.type_name = pkg.name
                 }
             });
 
