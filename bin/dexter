@@ -2,7 +2,10 @@
 //Note: usually we compare this against configtools, but we can't since they're not loaded yet....
 if(!process.env.DEXTER_DEV) {
     process.on('uncaughtException', function(err) {
-      console.log('ERROR', err ? err.stack || err : err);
+        console.log('ERROR', err);
+        if(configtools.isDev) {
+            console.log(err.stack);
+        }
     });
 }
 var 
@@ -156,7 +159,10 @@ function init(dir) {
                 console.log('It doesn\'t look like there\'s a valid package name for us to use for the repo...');
                 return;
             }
-            var remoteUri = configtools.getGitUrl() + user.username + '/' + packageName;
+            return packagetools.getRepoNamespace(packageName);
+        })
+        .then(function(packageNamespace) {
+            var remoteUri = configtools.getGitUrl() + packageNamespace;
             console.log('Using remote', remoteUri);
             gittools.getOrCreateRemote(
                 dir
@@ -427,19 +433,23 @@ function create(title) {
 }
 
 function publish(dir) {
-    var pkg = packagetools.getPackageData(dir)
-        , publishUrl = remotetools.getUrl('module/publish/' + pkg.name)
+    packagetools.getPackageData(dir)
+        .then(function(pkg) {
+            return packagetools.getDexterName(pkg.name);
+        })
+        .then(function(dexterName) {
+            var publishUrl = remotetools.getUrl('Module/publish/' + dexterName);
+            console.log(publishUrl);
+            if(configtools.isDev) {
+                console.log('Sending key to', publishUrl);
+            }
+            rest.post(publishUrl, remotetools.signRequest()).on('complete', function(result, response) {
+                remotetools.wrapResponse(result, response, function() {
+                    console.log('This version has been published.');
+                });
+            });
+        })
     ;
-    if(configtools.isDev) {
-        console.log('Sending key to', loginUrl);
-    }
-    rest.post(publishUrl, remotetools.signRequest({
-        data: credentials
-    })).on('complete', function(result, response) {
-        remotetools.wrapResponse(result, response, function() {
-            console.log('This version has been published.');
-        });
-    });
 }
 
 /**
